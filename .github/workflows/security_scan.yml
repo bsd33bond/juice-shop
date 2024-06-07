@@ -1,0 +1,42 @@
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  zap_scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Java
+      uses: actions/setup-java@v1
+      with:
+        java-version: '11'
+
+    - name: Start Juice Shop
+      run: |
+        npm install
+        npm start &
+        sleep 30
+
+    - name: OWASP ZAP Baseline Scan
+      uses: zaproxy/action-baseline@v0.5.0
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        target: 'http://localhost:3000'
+        format: 'html'
+        output: 'juice-baseline-report.html'
+
+    - name: Upload ZAP Report
+      uses: actions/upload-artifact@v2
+      with:
+        name: juice-baseline-report
+        path: juice-baseline-report.html
