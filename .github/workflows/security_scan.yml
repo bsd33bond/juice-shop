@@ -2,41 +2,49 @@ name: Security Scan
 
 on:
   push:
-    branches:
-      - main
+    branches: [ master ]
   pull_request:
-    branches:
-      - main
+    branches: [ master ]
 
 jobs:
-  zap_scan:
+  analyze:
+    name: Analyze CodeQL
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript', 'typescript' ]
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Set up Java
-      uses: actions/setup-java@v1
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
       with:
-        java-version: '11'
+        languages: ${{ matrix.language }}
 
-    - name: Start Juice Shop
-      run: |
-        npm install
-        npm start &
-        sleep 30
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
 
-    - name: OWASP ZAP Baseline Scan
-      uses: zaproxy/action-baseline@v0.5.0
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        target: 'http://localhost:3000'
-        format: 'html'
-        output: 'juice-baseline-report.html'
-
-    - name: Upload ZAP Report
-      uses: actions/upload-artifact@v2
-      with:
-        name: juice-baseline-report
-        path: juice-baseline-report.html
+  trivy:
+    name: Trivy Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+      - name: Run Trivy scan
+        run: trivy fs --exit-code 0 --no-progress --format json --output trivy-report.json .
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v2
+        with:
+          name: trivy-report
+          path: trivy-report.json
